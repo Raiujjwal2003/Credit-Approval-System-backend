@@ -88,10 +88,10 @@ const checkEligibility = asyncHandler(async (req, res) => {
        
         const { customer_id, loan_amount, interest_rate, tenure } = value;
 
-        // Fetch historical loan data for the given customer ID from the database
+       
         const historicalLoans = await Loan.findByCustomerId(customer_id);
 
-        // Calculate the credit score based on historical loan data and other components
+    
         const creditScore = calculateCreditScore(historicalLoans);
 
         await CreditScore.save(customerId, creditScore);
@@ -100,7 +100,7 @@ const checkEligibility = asyncHandler(async (req, res) => {
         // Determine loan eligibility based on credit score and other criteria
         const { approval, corrected_interest_rate } = determineLoanEligibility(creditScore, interest_rate, loan_amount, req.currentUser.monthly_salary, req.currentUser.current_emis);
 
-        // Return the response with loan approval status and interest rate
+        
         return res.status(200).json({
             customer_id,
             approval,
@@ -114,9 +114,11 @@ const checkEligibility = asyncHandler(async (req, res) => {
     }
 });
 
+
+
 // Function to calculate credit score based on historical loan data
 function calculateCreditScore(historicalLoans) {
-    // Initialize variables to track the components
+   
     let loansPaidOnTime = 0;
     let totalLoansTaken = 0;
     let loansCurrentYear = 0;
@@ -143,6 +145,8 @@ function calculateCreditScore(historicalLoans) {
         totalLoanVolume += loan.loan_amount;
     });
 
+
+    
     // Calculate credit score based on components
     let creditScore = 0;
     if (totalLoanVolume > historicalLoans[0].approved_limit) {
@@ -246,8 +250,7 @@ const createLoan = asyncHandler(async (req, res) => {
             }));
         }
 
-        // If loan is approved, process the loan
-        // You need to implement the logic to create a new loan entry in the database
+
         const newLoan = await Loan.create(customer_id, loan_amount, interest_rate, tenure);
 
         // Return the response with loan details
@@ -263,16 +266,6 @@ const createLoan = asyncHandler(async (req, res) => {
         return res.status(500).json(new ApiResponse(500, null, 'Error processing loan'));
     }
 });
-
-// Function to check loan eligibility
-async function checkLoanEligibility(customer, loan_amount, interest_rate, tenure) {
-    // Implement your logic to check loan eligibility based on customer's credit score and other criteria
-    // Return an object containing approval status and message
-}
-
-
-
-
 
 const viewLoanDetails = asyncHandler(async (req, res) => {
     const loanId = req.params.loan_id;
