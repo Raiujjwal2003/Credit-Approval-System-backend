@@ -2,7 +2,7 @@
   "name": "creditapprovalsystem",
   "version": "1.0.0",
   "description": "The Credit approval system",
-  "type": "module",
+  "type": "require",
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js"
@@ -10,7 +10,12 @@
   "author": "Ujjwal rai",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.19.2"
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "joi": "^17.12.3",
+    "mongoose": "^8.3.0",
+    "mysql2": "^3.9.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
