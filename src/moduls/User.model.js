@@ -14,8 +14,15 @@ class User {
     async save() {
         try {
            
-            const query = 'INSERT INTO customer_data (first_name, last_name, phone_number, age, monthly_salary, approved_limit) VALUES (?, ?, ?, ?, ?, ?)';
-            const values = [this.first_name, this.last_name, this.phone_number, this.age, this.monthly_salary, this.approved_limit];
+            const query = 
+            'INSERT INTO customer_data(first_name, last_name, phone_number, age, monthly_salary, approved_limit) VALUES (?, ?, ?, ?, ?, ?)';
+            const values = 
+                [this.first_name,
+                this.last_name,
+                this.phone_number, 
+                this.age, 
+                this.monthly_salary, 
+                this.approved_limit];
             await pool.query(query, values);
 
             return this;
