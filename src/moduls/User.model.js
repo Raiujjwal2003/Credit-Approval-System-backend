@@ -30,6 +30,27 @@ class User {
             throw error;
         }
     }
+
+
+    static async findById(customerId) {
+        try {
+            const query = 'SELECT * FROM customer_data WHERE customer_id = ?';
+            const [rows] = await pool.query(query, [customerId]);
+
+            if (rows.length === 0) {
+                return null; // Customer not found
+            }
+
+            // Extract customer details from the query result
+            const customerData = rows[0];
+            const { first_name, last_name, phone_number, age } = customerData;
+
+            // Create and return a Customer object
+            return new Customer(customerId, first_name, last_name, phone_number, age);
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 module.exports = User;
