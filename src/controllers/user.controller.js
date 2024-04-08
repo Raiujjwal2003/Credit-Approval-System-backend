@@ -5,6 +5,7 @@ const User = require('../moduls/User.model.js');
 const Loan = require('../moduls/loandata.model.js'); 
 const CreditScore = require('../moduls/credit_score.model.js'); 
 const pool = require('../config/database');
+const { log } = require('console');
 
 
 const userSchema = Joi.object({
@@ -77,98 +78,179 @@ const eligibilitySchema = Joi.object({
 
 
 // Controller to check loan eligibility
+// Controller to check loan eligibility
 const checkEligibility = asyncHandler(async (req, res) => {
     try {
+      // Validate request body against the eligibility schema
+      const { error, value } = eligibilitySchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+      }
+  
+      // Destructure validated values
+      const { customer_id, loan_amount, interest_rate, tenure } = value;
+
+      console.log(customer_id);
+  
+      // Retrieve historical loans for the customer
+      const historicalLoans = await Loan.findByCustomerId(customer_id);
+
+      console.log(historicalLoans);
+  
+      // Calculate credit score based on historical loans
+      const creditScore = calculateCreditScore(historicalLoans);
+      console.log(creditScore);
+  
+      // Save the calculated credit score
+      await CreditScore.save(customer_id, creditScore);
+  
+      // Determine loan eligibility and corrected interest rate
+      const { approval, corrected_interest_rate } = determineLoanEligibility(
+        creditScore,
+        interest_rate,
+        loan_amount,
+        req.currentUser.monthly_salary,
+        req.currentUser.current_emis
+      );
+  
+      // Calculate monthly installment if the loan is approved
+      const monthly_installment = approval
+        ? calculateMonthlyInstallment(loan_amount, corrected_interest_rate, tenure)
+        : null;
+  
+      // Respond with eligibility results
+      return res.status(200).json({
+        customer_id,
+        approval,
+        interest_rate: corrected_interest_rate || interest_rate,
+        tenure,
+        monthly_installment
+      });
+    } catch (error) {
+      // Log and respond with error
+      console.error('Error checking loan eligibility:', error);
+      return res.status(500).json({ error: 'Error checking loan eligibility' });
+    }
+  });
+
+
+// // // Function to calculate credit score based on historical loan data
+// function calculateCreditScore(historicalLoans) {
+   
+//     let loansPaidOnTime = 0;
+//     let totalLoansTaken = 0;
+//     let loansCurrentYear = 0;
+//     let totalLoanVolume = 0;
+
+//     // Calculate components based on historical loan data
+//     historicalLoans.forEach(loan => {
+//         // Check if the loan was paid on time
+//         if (loan.emis_paid_on_time) {
+//             loansPaidOnTime++;
+//         }
         
-        const { error, value } = eligibilitySchema.validate(req.body);
-        if (error) {
-            return res.status(400).json({ error: error.details[0].message });
-        }
+//         // Increment total loans taken
+//         totalLoansTaken++;
 
-       
-        const { customer_id, loan_amount, interest_rate, tenure } = value;
+//         // Check loan activity in the current year
+//         const currentYear = new Date().getFullYear();
+//         const loanYear = new Date(loan.start_date).getFullYear();
+//         if (loanYear === currentYear) {
+//             loansCurrentYear++;
+//         }
 
-       
-        const historicalLoans = await Loan.findByCustomerId(customer_id);
+//         // Add loan amount to total loan volume
+//         totalLoanVolume += loan.loan_amount;
+//     });
+
 
     
-        const creditScore = calculateCreditScore(historicalLoans);
+//     // Calculate credit score based on components
+//     let creditScore = 0;
+//     if (totalLoanVolume > historicalLoans[0].approved_limit) {
+//         creditScore = 0;
+//     } else {
+//         // Calculate credit score based on the weighted average of components
+//         // Adjust weights based on the importance of each component
+//         const weightPaidOnTime = 0.3;
+//         const weightLoansTaken = 0.2;
+//         const weightCurrentYear = 0.2;
+//         const weightLoanVolume = 0.3;
 
-        await CreditScore.save(customerId, creditScore);
+//         const weightedScorePaidOnTime = loansPaidOnTime / totalLoansTaken * 100 * weightPaidOnTime;
+//         const weightedScoreLoansTaken = totalLoansTaken / 10 * weightLoansTaken;
+//         const weightedScoreCurrentYear = loansCurrentYear / 2 * weightCurrentYear;
+//         const weightedScoreLoanVolume = (totalLoanVolume / historicalLoans[0].approved_limit) * 100 * weightLoanVolume;
 
+//         creditScore = Math.round(weightedScorePaidOnTime + weightedScoreLoansTaken + weightedScoreCurrentYear + weightedScoreLoanVolume);
+//     }
 
-        // Determine loan eligibility based on credit score and other criteria
-        const { approval, corrected_interest_rate } = determineLoanEligibility(creditScore, interest_rate, loan_amount, req.currentUser.monthly_salary, req.currentUser.current_emis);
-
-        
-        return res.status(200).json({
-            customer_id,
-            approval,
-            interest_rate: corrected_interest_rate || interest_rate,
-            tenure,
-            monthly_installment: calculateMonthlyInstallment(loan_amount, interest_rate, tenure)
-        });
-    } catch (error) {
-        console.error('Error checking loan eligibility:', error);
-        return res.status(500).json({ error: 'Error checking loan eligibility' });
-    }
-});
-
-
+//     return creditScore;
+// }
 
 // Function to calculate credit score based on historical loan data
 function calculateCreditScore(historicalLoans) {
-   
+    // Check if historicalLoans is an array and not empty
+    if (!Array.isArray(historicalLoans) || historicalLoans.length === 0) {
+        throw new Error('historicalLoans must be a non-empty array');
+    }
+
     let loansPaidOnTime = 0;
-    let totalLoansTaken = 0;
+    let totalLoansTaken = historicalLoans.length;
     let loansCurrentYear = 0;
     let totalLoanVolume = 0;
+    const currentYear = new Date().getFullYear();
+    console.log(currentYear);
+    let approvedLimitExceeded = false;
 
-    // Calculate components based on historical loan data
+    // Process each loan
     historicalLoans.forEach(loan => {
-        // Check if the loan was paid on time
-        if (loan.emis_paid_on_time) {
+        if (loan.emis_paid_on_time === loan.tenure) {
             loansPaidOnTime++;
         }
-        
-        // Increment total loans taken
-        totalLoansTaken++;
-
-        // Check loan activity in the current year
-        const currentYear = new Date().getFullYear();
-        const loanYear = new Date(loan.start_date).getFullYear();
-        if (loanYear === currentYear) {
+        if (new Date(loan.start_date).getFullYear() === currentYear) {
             loansCurrentYear++;
         }
-
-        // Add loan amount to total loan volume
         totalLoanVolume += loan.loan_amount;
+
+        // Check if any loan exceeds the approved limit
+        if (loan.loan_amount > loan.approved_limit) {
+            approvedLimitExceeded = true;
+        }
     });
 
-
-    
-    // Calculate credit score based on components
-    let creditScore = 0;
-    if (totalLoanVolume > historicalLoans[0].approved_limit) {
-        creditScore = 0;
-    } else {
-        // Calculate credit score based on the weighted average of components
-        // Adjust weights based on the importance of each component
-        const weightPaidOnTime = 0.3;
-        const weightLoansTaken = 0.2;
-        const weightCurrentYear = 0.2;
-        const weightLoanVolume = 0.3;
-
-        const weightedScorePaidOnTime = loansPaidOnTime / totalLoansTaken * 100 * weightPaidOnTime;
-        const weightedScoreLoansTaken = totalLoansTaken / 10 * weightLoansTaken;
-        const weightedScoreCurrentYear = loansCurrentYear / 2 * weightCurrentYear;
-        const weightedScoreLoanVolume = (totalLoanVolume / historicalLoans[0].approved_limit) * 100 * weightLoanVolume;
-
-        creditScore = Math.round(weightedScorePaidOnTime + weightedScoreLoansTaken + weightedScoreCurrentYear + weightedScoreLoanVolume);
+    console.log(approvedLimitExceeded);
+    // If any loan exceeds the approved limit, credit score is 0
+    if (approvedLimitExceeded) {
+        return 0;
     }
+
+    // Calculate credit score components
+    let creditScore = 100; // Start with a max score of 100
+
+    // Deduct points for loans not paid on time
+    creditScore -= (totalLoansTaken - loansPaidOnTime) * 10;
+
+    // Deduct points based on the number of loans taken
+    creditScore -= totalLoansTaken * 5;
+
+    // Deduct points for loan activity in the current year
+    creditScore -= loansCurrentYear * 20;
+
+    // Adjust score based on loan volume
+    // Assuming the approved limit is a sum of all individual loan approved limits
+    let sumApprovedLimits = historicalLoans.reduce((sum, loan) => sum + loan.approved_limit, 0);
+    creditScore -= (totalLoanVolume / sumApprovedLimits) * 50;
+
+    console.log(sumApprovedLimits);
+    // Ensure credit score is within the range of 0 to 100
+    creditScore = Math.max(0, Math.min(creditScore, 100));
 
     return creditScore;
 }
+
+
+
 
 function determineLoanEligibility(creditScore, interestRate, loanAmount, monthlySalary, currentEMIs) {
     let approval = false;
