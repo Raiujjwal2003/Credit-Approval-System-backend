@@ -2,8 +2,8 @@ const Joi = require('joi');
 const { ApiResponse } = require('../utils/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler.js');
 const User = require('../moduls/User.model.js'); 
-const User = require('../moduls/loandata.model.js'); 
-const User = require('../moduls/credit_score.model.js'); 
+const Loan = require('../moduls/loandata.model.js'); 
+const CreditScore = require('../moduls/credit_score.model.js'); 
 const pool = require('../config/database');
 
 
