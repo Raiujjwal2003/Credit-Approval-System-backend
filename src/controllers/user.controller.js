@@ -97,32 +97,40 @@ const checkEligibility = asyncHandler(async (req, res) => {
 
       console.log(historicalLoans);
   
+       const customer_data = await User.findById(customer_id)
+       console.log(customer_data.approved_limit);
       // Calculate credit score based on historical loans
-      const creditScore = calculateCreditScore(historicalLoans);
+      const creditScore = calculateCreditScore(historicalLoans , customer_data.approved_limit);
+    //   console.log();
       console.log(creditScore);
   
-      // Save the calculated credit score
-      await CreditScore.save(customer_id, creditScore);
+      // Create an instance of CreditScore with the customer ID and credit score
+    const newCreditScore = new CreditScore(customer_id, creditScore);
+
+// Save the calculated credit score
+    await newCreditScore.save();
   
       // Determine loan eligibility and corrected interest rate
-      const { approval, corrected_interest_rate } = determineLoanEligibility(
+      const { approval, correctedInterestRate } = determineLoanEligibility(
         creditScore,
         interest_rate,
         loan_amount,
-        req.currentUser.monthly_salary,
-        req.currentUser.current_emis
+        customer_data.monthly_salary,
+        Loan.emis_paid_on_time
       );
+
+      console.log(approval , correctedInterestRate);
   
       // Calculate monthly installment if the loan is approved
       const monthly_installment = approval
-        ? calculateMonthlyInstallment(loan_amount, corrected_interest_rate, tenure)
+        ? calculateMonthlyInstallment(loan_amount, correctedInterestRate, tenure)
         : null;
   
       // Respond with eligibility results
       return res.status(200).json({
         customer_id,
         approval,
-        interest_rate: corrected_interest_rate || interest_rate,
+        interest_rate: correctedInterestRate ,
         tenure,
         monthly_installment
       });
@@ -189,7 +197,7 @@ const checkEligibility = asyncHandler(async (req, res) => {
 // }
 
 // Function to calculate credit score based on historical loan data
-function calculateCreditScore(historicalLoans) {
+function calculateCreditScore(historicalLoans , approved_limit) {
     // Check if historicalLoans is an array and not empty
     if (!Array.isArray(historicalLoans) || historicalLoans.length === 0) {
         throw new Error('historicalLoans must be a non-empty array');
@@ -214,7 +222,7 @@ function calculateCreditScore(historicalLoans) {
         totalLoanVolume += loan.loan_amount;
 
         // Check if any loan exceeds the approved limit
-        if (loan.loan_amount > loan.approved_limit) {
+        if (loan.loan_amount > approved_limit) {
             approvedLimitExceeded = true;
         }
     });
@@ -239,7 +247,7 @@ function calculateCreditScore(historicalLoans) {
 
     // Adjust score based on loan volume
     // Assuming the approved limit is a sum of all individual loan approved limits
-    let sumApprovedLimits = historicalLoans.reduce((sum, loan) => sum + loan.approved_limit, 0);
+    let sumApprovedLimits = historicalLoans.reduce((sum, loan) => sum + approved_limit, 0);
     creditScore -= (totalLoanVolume / sumApprovedLimits) * 50;
 
     console.log(sumApprovedLimits);
@@ -252,38 +260,67 @@ function calculateCreditScore(historicalLoans) {
 
 
 
-function determineLoanEligibility(creditScore, interestRate, loanAmount, monthlySalary, currentEMIs) {
-    let approval = false;
-    let corrected_interest_rate = null;
+// function determineLoanEligibility(creditScore, interestRate, loanAmount, monthlySalary, currentEMIs) {
 
-    // Check if sum of all current EMIs > 50% of monthly salary
-    const totalEMIs = currentEMIs.reduce((acc, curr) => acc + curr, 0);
-    const maxEMIs = monthlySalary * 0.5;
-    if (totalEMIs > maxEMIs) {
-        return { approval, corrected_interest_rate };
-    }
 
-    // Apply loan approval criteria based on credit score
-    if (creditScore > 50) {
-        approval = true;
-    } else if (creditScore > 30) {
-        if (interestRate <= 12) {
-            approval = true;
-        } else {
-            corrected_interest_rate = 12;
-        }
-    } else if (creditScore > 10) {
-        if (interestRate <= 16) {
-            approval = true;
-        } else {
-            corrected_interest_rate = 16;
-        }
-    }
+//     let approval = false;
+//     let corrected_interest_rate = null;
 
-    return { approval, corrected_interest_rate };
-}
+//     // Check if sum of all current EMIs > 50% of monthly salary
+//     const totalEMIs = currentEMIs.reduce((acc, curr) => acc + curr, 0);
+//     const maxEMIs = monthlySalary * 0.5;
+//     if (totalEMIs > maxEMIs) {
+//         return { approval, corrected_interest_rate };
+//     }
+
+//     // Apply loan approval criteria based on credit score
+//     if (creditScore > 50) {
+//         approval = true;
+//     } else if (creditScore > 30) {
+//         if (interestRate <= 12) {
+//             approval = true;
+//         } else {
+//             corrected_interest_rate = 12;
+//         }
+//     } else if (creditScore > 10) {
+//         if (interestRate <= 16) {
+//             approval = true;
+//         } else {
+//             corrected_interest_rate = 16;
+//         }
+//     }
+
+//     return { approval, corrected_interest_rate };
+// }
 
 // Function to calculate monthly installment for the loan
+
+function determineLoanEligibility(creditScore, interestRate, loanAmount, monthlySalary, emisPaidOnTime) {
+    let approval = false;
+    let correctedInterestRate = parseFloat(interestRate);
+  
+    // Logic to determine loan eligibility and corrected interest rate
+    if (creditScore > 50) {
+      approval = true;
+    } else if (creditScore > 30 && creditScore <= 50) {
+      correctedInterestRate = Math.max(correctedInterestRate, 12);
+      approval = true;
+    } else if (creditScore > 10 && creditScore <= 30) {
+      correctedInterestRate = Math.max(correctedInterestRate, 16);
+      approval = true;
+    } else {
+      approval = false; // Not eligible for a loan
+    }
+  
+    // Additional check for monthly repayment capacity
+    if (monthlySalary / 2 < loanAmount / emisPaidOnTime) {
+      approval = false; // Monthly repayment exceeds 50% of monthly salary
+    }
+  
+    return { approval, correctedInterestRate };
+  }
+  
+
 function calculateMonthlyInstallment(loanAmount, interestRate, tenure) {
     // Convert interest rate from percentage to decimal
     const monthlyInterestRate = interestRate / 12 / 100;
