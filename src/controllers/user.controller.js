@@ -336,6 +336,12 @@ function calculateMonthlyInstallment(loanAmount, interestRate, tenure) {
 
 
 
+const loanSchema = Joi.object({
+    customer_id: Joi.number().required(),
+    loan_amount: Joi.number().required(),
+    interest_rate: Joi.number().required(),
+    tenure: Joi.number().required(),
+});
 
 // Controller to process a new loan
 const createLoan = asyncHandler(async (req, res) => {
@@ -350,7 +356,7 @@ const createLoan = asyncHandler(async (req, res) => {
         const { customer_id, loan_amount, interest_rate, tenure } = value;
 
         // Fetch customer data from the database based on the customer_id
-        const customer = await Customer.findById(customer_id);
+        const customer = await User.findById(customer_id);
         if (!customer) {
             throw new Error('Customer not found');
         }
